@@ -19,11 +19,11 @@ Slightly following [genie]'s behavior, but noted below...
 
 ## Install
 
-<!--
 ### Arch Linux AUR
 
 https://aur.archlinux.org/packages/subsystemctl
 
+<!--
 ### Debian/Ubuntu
 
 Pre-built package binaries available at https://github.com/sorah/subsystemctl/releases for your convenient.
