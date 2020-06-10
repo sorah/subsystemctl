@@ -37,9 +37,9 @@ pub fn is_wsl1() -> Result<bool, Box<dyn std::error::Error>> {
 }
 
 pub fn systemd_bin() -> Result<String, Error> {
-    if let Ok(bin) = std::env::var("SUBSYSTEMCTL_SYSTEMD_BIN") {
-        return Ok(bin);
-    }
+    //if let Ok(bin) = std::env::var("SUBSYSTEMCTL_SYSTEMD_BIN") {
+    //    return Ok(bin);
+    //}
     if std::fs::metadata("/lib/systemd/systemd").is_ok() {
         return Ok("/lib/systemd/systemd".to_string());
     }
