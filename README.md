@@ -102,6 +102,12 @@ else
 fi
 ```
 
+## Tips
+
+### systemd-resolved, networkd are recommended to be disabled
+
+otherwise `/etc/resolv.conf` might get overwritten to resolved stub-resolver.
+
 ## Author
 
 Sorah Fukumori https://sorah.jp/
