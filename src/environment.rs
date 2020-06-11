@@ -1,8 +1,8 @@
 use crate::error::Error;
-static PROC_MOUNTS: &'static str = "/proc/self/mounts";
+static PROC_MOUNTS: &str = "/proc/self/mounts";
 
-static OSRELEASE_FILE: &'static str = "/proc/sys/kernel/osrelease";
-static WSL_OSRELEASE: &'static str = "microsoft";
+static OSRELEASE_FILE: &str = "/proc/sys/kernel/osrelease";
+static WSL_OSRELEASE: &str = "microsoft";
 
 pub fn is_wsl() -> Result<bool, Box<dyn std::error::Error>> {
     let osrelease = String::from_utf8(std::fs::read(OSRELEASE_FILE)?)?;

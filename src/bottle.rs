@@ -20,9 +20,9 @@ pub fn get_systemd_pid() -> Result<Option<i32>, Box<dyn std::error::Error>> {
         }
         Err(e) => {
             if e.kind() == std::io::ErrorKind::NotFound {
-                return Ok(None);
+                Ok(None)
             } else {
-                return Err(Box::new(e));
+                Err(Box::new(e))
             }
         }
     }
@@ -252,7 +252,7 @@ fn exec_systemd2_child(systemd_bin: CString) -> i32 {
     nix::fcntl::open(OsStr::new("/dev/null"), OFlag::O_WRONLY, nix::sys::stat::Mode::empty()).unwrap();
 
     nix::unistd::execve(systemd_bin.as_c_str(), &[systemd_bin.as_c_str()], &[]).unwrap();
-    0
+    panic!("should unreach");
 }
 
 pub fn stop() -> Result<(), Box<dyn std::error::Error>> {
