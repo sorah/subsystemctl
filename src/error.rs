@@ -8,4 +8,10 @@ pub enum Error {
 
     #[error("Systemd is not running")]
     NotRunning,
+
+    #[error("Something went wrong while waiting")]
+    WaitFailed,
+
+    #[error("Something went wrong while starting, exitstatus={0}")]
+    StartFailed(i32),
 }

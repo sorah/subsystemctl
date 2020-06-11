@@ -24,17 +24,35 @@ fn main() -> anyhow::Result<()> {
                         .takes_value(true)
                         .short("N")
                         .long("hostname-suffix"),
+                )
+                .arg(
+                    clap::Arg::with_name("wait")
+                        .help("Wait systemd-machined to start up")
+                        .short("w")
+                        .long("wait"),
                 ),
         )
         .subcommand(clap::SubCommand::with_name("stop").about("stop"))
         .subcommand(
             clap::SubCommand::with_name("shell")
                 .about("Start a shell in a systemd namespace using machinectl-shell")
+                .arg(
+                    clap::Arg::with_name("start")
+                        .help("Start systemd when necessary")
+                        .short("s")
+                        .long("start"),
+                )
                 .arg(clap::Arg::with_name("uid").takes_value(true).short("u").long("uid")),
         )
         .subcommand(
             clap::SubCommand::with_name("exec")
                 .about("Execute a command in a systemd namespace")
+                .arg(
+                    clap::Arg::with_name("start")
+                        .help("Start systemd when necessary")
+                        .short("s")
+                        .long("start"),
+                )
                 .arg(
                     clap::Arg::with_name("uid")
                         .help("setuid(2) on exec. Only available for root, default to current uid (getuid(2)")
@@ -82,7 +100,6 @@ fn cmd_start(m: &clap::ArgMatches) -> anyhow::Result<()> {
         log::warn!("systemd is running, not starting again");
         return Ok(());
     }
-
     let hostname = if m.is_present("hostname") {
         Some(m.value_of_lossy("hostname").unwrap().to_string())
     } else if m.is_present("hostname-suffix") {
@@ -93,11 +110,8 @@ fn cmd_start(m: &clap::ArgMatches) -> anyhow::Result<()> {
     };
 
     // TODO: resolv.conf
+    autostart(m.is_present("wait"), hostname)?;
 
-    let r = bottle::start(hostname);
-    if let Err(e) = r {
-        return Err(anyhow::anyhow!("Failed to start: {}", e));
-    }
     Ok(())
 }
 
@@ -122,8 +136,14 @@ fn cmd_stop(_m: &clap::ArgMatches) -> anyhow::Result<()> {
 fn cmd_exec(m: &clap::ArgMatches) -> anyhow::Result<()> {
     check_prereq()?;
     if !bottle::is_running() {
-        return Err(anyhow::anyhow!("systemd is not running. Try start it first: subsystemctl start"));
+        if m.is_present("start") {
+            log::info!("Starting systemd");
+            autostart(true, None)?;
+        } else {
+            return Err(anyhow::anyhow!("systemd is not running. Try start it first: subsystemctl start"));
+        }
     }
+
     let cmd = m.values_of_lossy("command");
     if cmd.is_none() {
         return Err(anyhow::anyhow!("command not given"));
@@ -139,8 +159,14 @@ fn cmd_exec(m: &clap::ArgMatches) -> anyhow::Result<()> {
 fn cmd_shell(m: &clap::ArgMatches) -> anyhow::Result<()> {
     check_prereq()?;
     if !bottle::is_running() {
-        return Err(anyhow::anyhow!("systemd is not running. Try start it first: subsystemctl start"));
+        if m.is_present("start") {
+            log::info!("Starting systemd");
+            autostart(true, None)?;
+        } else {
+            return Err(anyhow::anyhow!("systemd is not running. Try start it first: subsystemctl start"));
+        }
     }
+
     let (uid, _gid) = extract_uid_gid(m)?;
     let r = bottle::shell(Some(uid));
     match r {
@@ -212,4 +238,19 @@ fn extract_uid_gid(m: &clap::ArgMatches) -> anyhow::Result<(nix::unistd::Uid, ni
         }
     };
     Ok((uid, gid))
+}
+
+fn autostart(wait: bool, hostname: Option<String>) -> anyhow::Result<()> {
+    environment::machinectl_bin()?;
+    let r = bottle::start(hostname);
+    if let Err(e) = r {
+        return Err(anyhow::anyhow!("Failed to start: {}", e));
+    }
+    if wait {
+        if let Err(e) = bottle::wait() {
+            return Err(anyhow::anyhow!("Failed to wait machined: {}", e));
+        }
+    }
+
+    Ok(())
 }

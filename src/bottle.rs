@@ -76,16 +76,15 @@ pub fn is_inside() -> bool {
     environment::is_pid1_systemd()
 }
 
-pub fn start(name: Option<String>) -> Result<i32, Box<dyn std::error::Error>> {
-    ensure_dropin()?;
+pub fn start(name: Option<String>) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(hostname) = name {
         ensure_hostname(hostname)?;
     }
-    let retval = exec_systemd();
-    Ok(retval)
+    exec_systemd_ensure_dropin()?;
+    Ok(exec_systemd()?)
 }
 
-fn ensure_dropin() -> std::io::Result<()> {
+fn exec_systemd_ensure_dropin() -> std::io::Result<()> {
     std::fs::create_dir_all("/run/systemd/system.conf.d")?;
 
     let envs = vec!["WSL_INTEROP", "WSL_DISTRO_NAME", "WSL_NAME", "WT_SESSION", "WT_PROFILE_ID"];
@@ -129,40 +128,43 @@ fn ensure_hostname(name: String) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn exec_systemd() -> i32 {
+fn exec_systemd() -> Result<(), error::Error> {
     use nix::unistd::ForkResult;
 
     let systemd_bin = CString::new(environment::systemd_bin().unwrap()).unwrap();
 
     match nix::unistd::fork() {
-        Ok(ForkResult::Child) => return exec_systemd1_child(systemd_bin),
-        Ok(ForkResult::Parent { child, .. }) => return exec_systemd1_parent(child),
+        Ok(ForkResult::Child) => exec_systemd0_handle_child_failure(exec_systemd1_child(systemd_bin)),
+        Ok(ForkResult::Parent { child, .. }) => exec_systemd1_parent(child),
         Err(e) => panic!(e),
     }
 }
 
-fn exec_systemd1_parent(child: nix::unistd::Pid) -> i32 {
-    use nix::sys::wait::WaitStatus;
-
-    match nix::sys::wait::waitpid(child, Some(nix::sys::wait::WaitPidFlag::WNOWAIT)) {
-        Ok(WaitStatus::Exited(_pid, status)) => {
-            return status;
+fn exec_systemd0_handle_child_failure(r: Result<(), error::Error>) -> Result<(), error::Error> {
+    match r {
+        Ok(_) => {} // do nothing
+        Err(error::Error::StartFailed(exitstatus)) => {
+            log::error!("Something went wrong while starting");
+            std::process::exit(exitstatus);
         }
-        Ok(WaitStatus::Signaled(_pid, signal, _)) => {
-            return 128 + (signal as i32);
-        }
-        Err(nix::Error::Sys(nix::errno::Errno::ECHILD)) => {
-            return 128;
-        }
-        _ => {} // ignore,
+        Err(e) => panic!(e),
     }
+    std::process::exit(0);
+}
+
+fn exec_systemd1_parent(child: nix::unistd::Pid) -> Result<(), error::Error> {
+    use nix::sys::wait::WaitStatus;
 
     // TODO: monitor systemd status instead of pid file
     loop {
         match get_systemd_pid() {
             Ok(Some(pid)) => {
                 log::debug!("Watching pid: child_pid={}, pid={}", child, pid);
-                break;
+                let pidns_path = format!("/proc/{}/ns/pid", pid);
+                let mntns_path = format!("/proc/{}/ns/mnt", pid);
+                if std::fs::metadata(pidns_path).is_ok() && std::fs::metadata(mntns_path).is_ok() {
+                    break;
+                }
             }
             Ok(None) => {
                 log::debug!("Watching pid: none");
@@ -171,14 +173,26 @@ fn exec_systemd1_parent(child: nix::unistd::Pid) -> i32 {
                 log::debug!("Watching pid: e={:?}", e);
             }
         }
+        match nix::sys::wait::waitpid(child, Some(nix::sys::wait::WaitPidFlag::WNOWAIT)) {
+            Ok(WaitStatus::Exited(_pid, status)) => {
+                return Err(error::Error::StartFailed(status));
+            }
+            Ok(WaitStatus::Signaled(_pid, signal, _)) => {
+                return Err(error::Error::StartFailed(128 + (signal as i32)));
+            }
+            Err(nix::Error::Sys(nix::errno::Errno::ECHILD)) => {
+                return Err(error::Error::StartFailed(128));
+            }
+            _ => {} // ignore,
+        }
         std::thread::sleep(std::time::Duration::from_millis(500));
     }
 
     // TODO:
-    0
+    Ok(())
 }
 
-fn exec_systemd1_child(systemd_bin: CString) -> i32 {
+fn exec_systemd1_child(systemd_bin: CString) -> Result<(), error::Error> {
     use nix::sched::CloneFlags;
     use nix::unistd::ForkResult;
 
@@ -186,18 +200,18 @@ fn exec_systemd1_child(systemd_bin: CString) -> i32 {
     nix::unistd::setsid().unwrap();
 
     match nix::unistd::fork() {
-        Ok(ForkResult::Child) => return exec_systemd2_child(systemd_bin),
-        Ok(ForkResult::Parent { child, .. }) => return exec_systemd2_parent(child),
+        Ok(ForkResult::Child) => exec_systemd0_handle_child_failure(exec_systemd2_child(systemd_bin)),
+        Ok(ForkResult::Parent { child, .. }) => exec_systemd2_parent(child),
         Err(e) => panic!(e),
     }
 }
 
-fn exec_systemd2_parent(child: nix::unistd::Pid) -> i32 {
+fn exec_systemd2_parent(child: nix::unistd::Pid) -> Result<(), error::Error> {
     put_systemd_pid(child.as_raw()).unwrap();
     std::process::exit(0);
 }
 
-fn exec_systemd2_child(systemd_bin: CString) -> i32 {
+fn exec_systemd2_child(systemd_bin: CString) -> Result<(), error::Error> {
     use nix::fcntl::OFlag;
     use nix::mount::MsFlags;
     use std::os::unix::io::RawFd;
@@ -271,6 +285,60 @@ fn SIGRTMIN_plus_4() -> nix::sys::signal::Signal {
     unsafe { std::mem::transmute(__libc_current_sigrtmin() + 4) }
 }
 
+pub fn wait() -> Result<(), Box<dyn std::error::Error>> {
+    use nix::sys::wait::WaitStatus;
+    use nix::unistd::ForkResult;
+
+    log::debug!("Waiting systemd-machined to start");
+    let machinectl = environment::machinectl_bin()?;
+
+    match nix::unistd::fork() {
+        Ok(ForkResult::Child) => {
+            wait_internal(machinectl);
+            std::process::exit(0);
+        }
+        Ok(ForkResult::Parent { child, .. }) => {
+            loop {
+                match nix::sys::wait::waitpid(child, None) {
+                    Ok(WaitStatus::Exited(_pid, status)) => {
+                        if status == 0 {
+                            log::debug!("machined is now up");
+                            return Ok(());
+                        } else {
+                            return Err(Box::new(error::Error::WaitFailed));
+                        }
+                    }
+                    Ok(WaitStatus::Signaled(_pid, _signal, _)) => {
+                        return Err(Box::new(error::Error::WaitFailed));
+                    }
+                    Ok(_) => {}                                                       // ignore
+                    Err(nix::Error::Sys(nix::errno::Errno::ECHILD)) => return Ok(()), // ???
+                    Err(nix::Error::Sys(nix::errno::Errno::EINTR)) => {}              // ignore
+                    Err(e) => panic!(e),
+                }
+            }
+        }
+
+        Err(e) => panic!(e),
+    }
+}
+
+fn wait_internal(machinectl: String) {
+    setns_systemd();
+    loop {
+        let cmd = std::process::Command::new(&machinectl)
+            .arg("list")
+            .output()
+            .expect("failed to execute machinectl list");
+        if cmd.status.success() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(600));
+        log::debug!("Still waiting systemd-machined to start");
+    }
+    log::debug!("systemd-machined is up (internal)");
+}
+
 pub fn exec(cmdline: Vec<String>, uid: nix::unistd::Uid, gid: nix::unistd::Gid) -> Result<i32, error::Error> {
     let args_string: Vec<CString> = cmdline.into_iter().map(|a| CString::new(a).unwrap()).collect();
     let args: Vec<&CStr> = args_string.iter().map(|s| s.as_c_str()).collect();
@@ -298,16 +366,9 @@ pub fn shell(uid: Option<nix::unistd::Uid>) -> Result<i32, error::Error> {
     )
 }
 
-fn enter(
-    path: &CStr,
-    args: &[&CStr],
-    uid: nix::unistd::Uid,
-    gid: nix::unistd::Gid,
-) -> Result<i32, error::Error> {
+fn setns_systemd() {
     use nix::fcntl::OFlag;
     use nix::sched::CloneFlags;
-    use nix::sys::wait::WaitStatus;
-    use nix::unistd::ForkResult;
 
     let sd_pid = get_systemd_pid().unwrap().unwrap();
     let pidns_path = format!("/proc/{}/ns/pid", sd_pid);
@@ -328,6 +389,18 @@ fn enter(
         nix::sched::setns(mntns_fd, CloneFlags::CLONE_NEWNS).unwrap();
         nix::unistd::close(mntns_fd).unwrap();
     }
+}
+
+fn enter(
+    path: &CStr,
+    args: &[&CStr],
+    uid: nix::unistd::Uid,
+    gid: nix::unistd::Gid,
+) -> Result<i32, error::Error> {
+    use nix::sys::wait::WaitStatus;
+    use nix::unistd::ForkResult;
+
+    setns_systemd();
 
     // TODO: cwd
 
