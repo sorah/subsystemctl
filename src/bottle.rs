@@ -244,6 +244,8 @@ fn exec_systemd2_child(systemd_bin: CString) -> Result<(), error::Error> {
     .expect("proc mount failure");
 
     nix::unistd::chdir("/").unwrap();
+    nix::unistd::setgid(nix::unistd::Gid::from_raw(0)).unwrap();
+    nix::unistd::setuid(nix::unistd::Uid::from_raw(0)).unwrap();
 
     match nix::unistd::close(0 as RawFd) {
         Ok(_) => {}
