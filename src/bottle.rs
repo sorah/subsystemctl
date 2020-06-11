@@ -346,13 +346,16 @@ pub fn exec(cmdline: Vec<String>, uid: nix::unistd::Uid, gid: nix::unistd::Gid) 
     enter(args[0], args.as_slice(), uid, gid)
 }
 
-pub fn shell(uid: Option<nix::unistd::Uid>) -> Result<i32, error::Error> {
+pub fn shell(uid: Option<nix::unistd::Uid>, quiet: bool) -> Result<i32, error::Error> {
     let machinectl = CString::new(environment::machinectl_bin()?).unwrap();
     let mut args = vec![CString::new("machinectl").unwrap(), CString::new("shell").unwrap()];
 
     if let Some(u) = uid {
         args.push(CString::new("--uid").unwrap());
         args.push(CString::new(format!("{}", u)).unwrap());
+    }
+    if quiet {
+        args.push(CString::new("--quiet").unwrap());
     }
 
     args.push(CString::new(".host").unwrap());
