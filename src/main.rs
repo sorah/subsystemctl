@@ -42,6 +42,12 @@ fn main() -> anyhow::Result<()> {
                         .short("s")
                         .long("start"),
                 )
+                .arg(
+                    clap::Arg::with_name("quiet")
+                        .help("Suppress machinectl-shell output")
+                        .short("q")
+                        .long("quiet"),
+                )
                 .arg(clap::Arg::with_name("uid").takes_value(true).short("u").long("uid")),
         )
         .subcommand(
@@ -168,7 +174,8 @@ fn cmd_shell(m: &clap::ArgMatches) -> anyhow::Result<()> {
     }
 
     let (uid, _gid) = extract_uid_gid(m)?;
-    let r = bottle::shell(Some(uid));
+    let quiet = m.is_present("quiet");
+    let r = bottle::shell(Some(uid), quiet);
     match r {
         Ok(retval) => std::process::exit(retval),
         Err(e) => return Err(anyhow::anyhow!("Failed to start: {}", e)),
