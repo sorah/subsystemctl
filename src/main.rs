@@ -199,11 +199,13 @@ fn cmd_is_inside(_m: &clap::ArgMatches) -> anyhow::Result<()> {
 }
 
 fn check_prereq() -> anyhow::Result<()> {
-    if !environment::is_wsl().expect("Cannot check WSL1/2 status") {
-        return Err(anyhow::anyhow!("not running in WSL1/2; This tool only runs in WSL2"));
-    }
-    if environment::is_wsl1().expect("Cannot check WSL1") {
-        return Err(anyhow::anyhow!("not running in WSL2; This tool only runs in WSL2"));
+    if std::env::var("SUBSYSTEMCTL_IGNORE_WSL_CHECK").is_err() {
+        if !environment::is_wsl().expect("Cannot check WSL1/2 status") {
+            return Err(anyhow::anyhow!("not running in WSL1/2; This tool only runs in WSL2"));
+        }
+        if environment::is_wsl1().expect("Cannot check WSL1") {
+            return Err(anyhow::anyhow!("not running in WSL2; This tool only runs in WSL2"));
+        }
     }
     Ok(())
 }
