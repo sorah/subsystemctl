@@ -19,9 +19,11 @@ Slightly following [genie]'s behavior, but noted below...
 
 ## Install
 
-### Arch Linux AUR
+### Arch Linux
 
-https://aur.archlinux.org/packages/subsystemctl
+PKGBUILD: https://github.com/sorah/arch.sorah.jp/tree/master/aur-sorah/PKGBUILDs/subsystemctl
+
+_(PKGBUILD originally submitted to AUR (https://aur.archlinux.org/packages/subsystemctl) was deleted as [they unwelcomes WSL-exclusive packages](https://lists.archlinux.org/pipermail/aur-requests/2020-June/041193.html).)_
 
 ### Debian/Ubuntu
 
