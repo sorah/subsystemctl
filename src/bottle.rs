@@ -362,6 +362,11 @@ pub fn shell(uid: Option<nix::unistd::Uid>, quiet: bool) -> Result<i32, error::E
 
     args.push(CString::new(".host").unwrap());
 
+    let cwd_arg = format!("{}", std::env::current_dir().unwrap().display()).replace("\'", "\'\"\'\"\'");
+    args.push(CString::new("/bin/sh").unwrap());
+    args.push(CString::new("-c").unwrap());
+    args.push(CString::new(format!("cd '{}'; exec ${{SHELL:-sh}}", cwd_arg)).unwrap());
+
     let args_c: Vec<&CStr> = args.iter().map(|s| s.as_c_str()).collect();
     enter(
         machinectl.as_c_str(),
@@ -406,8 +411,6 @@ fn enter(
     use nix::unistd::ForkResult;
 
     setns_systemd();
-
-    // TODO: cwd
 
     match nix::unistd::fork() {
         Ok(ForkResult::Child) => {
