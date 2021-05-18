@@ -360,7 +360,14 @@ pub fn shell(uid: Option<nix::unistd::Uid>, quiet: bool) -> Result<i32, error::E
         args.push(CString::new("--quiet").unwrap());
     }
 
+    args.push(CString::new("--setenv").unwrap());
+    args.push(CString::new(format!("SUBSYSTEMCTL_PATH={}", std::env::current_dir().unwrap().display())).unwrap());
+
     args.push(CString::new(".host").unwrap());
+
+    args.push(CString::new("/bin/sh").unwrap());
+    args.push(CString::new("-c").unwrap());
+    args.push(CString::new("cd \"${SUBSYSTEMCTL_PATH}\"; exec ${SHELL:-sh}").unwrap());
 
     let args_c: Vec<&CStr> = args.iter().map(|s| s.as_c_str()).collect();
     enter(
@@ -406,8 +413,6 @@ fn enter(
     use nix::unistd::ForkResult;
 
     setns_systemd();
-
-    // TODO: cwd
 
     match nix::unistd::fork() {
         Ok(ForkResult::Child) => {
