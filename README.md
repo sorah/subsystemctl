@@ -63,7 +63,7 @@ someone@hostname$ ...
 #### Specifying uid to login
 
 ```ps1
-PS> wsl -u root -- subsystemctl --uid=1000 shell
+PS> wsl -u root -- subsystemctl shell --uid=1000
 Connected to the local host. Press ^] three times within 1s to exit session.
 someone@hostname$ ...
 ```
@@ -108,6 +108,14 @@ if subsystemctl is-inside; then
 else
   echo "outside"
 fi
+```
+
+#### Automatically starting and entering a user shell
+
+```ps1
+PS> wsl.exe -- sh -c "subsystemctl is-running || subsystemctl start ; subsystemctl shell --uid=1000"
+Connected to the local host. Press ^] three times within 1s to exit session.
+someone@hostname$ ...
 ```
 
 ## Tips
