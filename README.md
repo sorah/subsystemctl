@@ -63,8 +63,18 @@ someone@hostname$ ...
 #### Specifying uid to login
 
 ```ps1
-PS> wsl -u root -- subsystemctl --uid=1000 shell
+PS> wsl -u root -- subsystemctl shell --uid=1000
 Connected to the local host. Press ^] three times within 1s to exit session.
+someone@hostname$ ...
+```
+
+#### Automatically starting and entering a user shell
+
+```ps1
+PS> wsl -u root -d Arch -- subsystemctl shell --uid=1000 --start
+[2021-06-27T16:32:20Z INFO  subsystemctl] Starting systemd
+Connected to the local host. Press ^] three times within 1s to exit session.
+
 someone@hostname$ ...
 ```
 
