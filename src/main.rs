@@ -73,7 +73,9 @@ fn main() -> anyhow::Result<()> {
                         .short("g")
                         .long("gid"),
                 )
-                .arg(clap::Arg::with_name("command").takes_value(true).index(1).multiple(true)),
+                .arg(clap::Arg::with_name("command").takes_value(true).multiple(true)
+                .allow_hyphen_values(true)
+                .last(true)),
         )
         .subcommand(
             clap::SubCommand::with_name("is-running")
