@@ -1,6 +1,6 @@
 [package]
 name = "subsystemctl"
-version = "0.1.2"
+version = "0.2.0"
 description = "Utility to run systemd in WSL2 with a Linux namespace"
 homepage = "https://github.com/sorah/subsystemctl"
 repository = "https://github.com/sorah/subsystemctl"
