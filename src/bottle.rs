@@ -348,7 +348,7 @@ pub fn exec(cmdline: Vec<String>, uid: nix::unistd::Uid, gid: nix::unistd::Gid) 
     enter(args[0], args.as_slice(), uid, gid)
 }
 
-pub fn shell(uid: Option<nix::unistd::Uid>, quiet: bool) -> Result<i32, error::Error> {
+pub fn shell<'a>(uid: Option<nix::unistd::Uid>, quiet: bool, exclude: &mut impl Iterator<Item = &'a str>, include: &mut impl Iterator<Item = &'a str>) -> Result<i32, error::Error> {
     let machinectl = CString::new(environment::machinectl_bin()?).unwrap();
     let mut args = vec![CString::new("machinectl").unwrap(), CString::new("shell").unwrap()];
 
@@ -362,6 +362,30 @@ pub fn shell(uid: Option<nix::unistd::Uid>, quiet: bool) -> Result<i32, error::E
 
     args.push(CString::new("--setenv").unwrap());
     args.push(CString::new(format!("SUBSYSTEMCTL_PATH={}", std::env::current_dir().unwrap().display())).unwrap());
+
+    let exclude: Vec<&str> = exclude.map(|v| v).collect();
+    let include: Vec<&str> = include.map(|v| v).collect();
+
+    if exclude.len() > 0 {
+        // if exclude list was provided
+        // copy every env variable except the ones in the exclude list
+        for (key, value) in std::env::vars() {
+            if exclude.contains(&key.as_str()) {
+                continue;
+            }
+            args.push(CString::new("--setenv").unwrap());
+            args.push(CString::new(format!("{}={}", key, value)).unwrap());
+        }
+    } else {
+        // default to the include list behaviour
+        // which copies only the variables in the include list
+        for (key, value) in std::env::vars() {
+            if include.contains(&key.as_str()) {
+                args.push(CString::new("--setenv").unwrap());
+                args.push(CString::new(format!("{}={}", key, value)).unwrap());
+            }
+        }
+    }
 
     args.push(CString::new(".host").unwrap());
 

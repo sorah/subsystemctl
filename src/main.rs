@@ -48,7 +48,23 @@ fn main() -> anyhow::Result<()> {
                         .short("q")
                         .long("quiet"),
                 )
-                .arg(clap::Arg::with_name("uid").takes_value(true).short("u").long("uid")),
+                .arg(clap::Arg::with_name("uid").takes_value(true).short("u").long("uid"))
+                .arg(
+                    clap::Arg::with_name("exclude-env")
+                        .help("Copy all environment variables except the ones specified in the list")
+                        .takes_value(true)
+                        .value_delimiter(",")
+                        .conflicts_with("include-env")
+                        .long("exclude-env"),
+                )
+                .arg(
+                    clap::Arg::with_name("include-env")
+                        .takes_value(true)
+                        .help("Copy the environment variables specified in the list. Defaults to empty list")
+                        .value_delimiter(",")
+                        .conflicts_with("exclude-env")
+                        .long("include-env"),
+                ),
         )
         .subcommand(
             clap::SubCommand::with_name("exec")
@@ -177,7 +193,9 @@ fn cmd_shell(m: &clap::ArgMatches) -> anyhow::Result<()> {
 
     let (uid, _gid) = extract_uid_gid(m)?;
     let quiet = m.is_present("quiet");
-    let r = bottle::shell(Some(uid), quiet);
+    let exclude = m.values_of("exclude-env").unwrap_or_default();
+    let include = m.values_of("include-env").unwrap_or_default();
+    let r = bottle::shell(Some(uid), quiet, &mut exclude.clone(), &mut include.clone());
     match r {
         Ok(retval) => std::process::exit(retval),
         Err(e) => return Err(anyhow::anyhow!("Failed to start: {}", e)),
