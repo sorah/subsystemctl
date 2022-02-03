@@ -1,5 +1,7 @@
 # subsystemd: Run systemd in WSL2
 
+__Maintanence Note:__ You may want to use [nullpo-head/wsl-distrod](https://github.com/nullpo-head/wsl-distrod) which provides better compatibility with systemd and easier installation, and well maintained.
+
 Run systemd under Linux namespace in WSL2. Heavily inspired by [arkane-systems/genie][genie], but written in Rust.
 
 ## Difference with arkane-systems/genie
