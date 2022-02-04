@@ -243,6 +243,14 @@ fn exec_systemd2_child(systemd_bin: CString) -> Result<(), error::Error> {
     )
     .expect("proc mount failure");
 
+    nix::mount::mount(
+        Some(OsStr::new("binfmt_misc")),
+        OsStr::new("/proc/sys/fs/binfmt_misc"),
+        Some(OsStr::new("binfmt_misc")),
+        MsFlags::MS_NOSUID | MsFlags::MS_NODEV | MsFlags::MS_NOEXEC,
+        OS_NONE,
+    )
+    .expect("binfmt mount failure");
     nix::unistd::chdir("/").unwrap();
     nix::unistd::setgid(nix::unistd::Gid::from_raw(0)).unwrap();
     nix::unistd::setuid(nix::unistd::Uid::from_raw(0)).unwrap();
